@@ -1,6 +1,6 @@
 ﻿namespace PE_Grader
 {
-    partial class Form3
+    partial class CodeWindow
     {
         /// <summary>
         /// Required designer variable.
@@ -48,7 +48,7 @@
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1148, 1178);
             this.Controls.Add(this.scintilla);
-            this.Name = "Form3";
+            this.Name = "CodeWindow";
             this.Text = "Form3";
             this.ResumeLayout(false);
 

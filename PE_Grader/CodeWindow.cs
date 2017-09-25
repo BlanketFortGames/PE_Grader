@@ -11,9 +11,9 @@ using ScintillaNET;
 
 namespace PE_Grader
 {
-    public partial class Form3 : Form
+    public partial class CodeWindow : Form
     {
-        public Form3(string code, string studentName)
+        public CodeWindow(string code, string studentName)
         {
             InitializeComponent();
             // Configuring the default style with properties

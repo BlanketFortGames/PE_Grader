@@ -13,32 +13,30 @@ using SevenZipExtractor;
 
 namespace PE_Grader
 {
-    public partial class Form2 : Form
+    public partial class StudentList : Form
     {
-        private const string cscCmd1 =
-            "\"C:\\Users\\bkalb\\Documents\\IGME 106 Online\\PE_Grader\\packages\\Microsoft.Net.Compilers.2.3.2\\tools\\csc.exe\" ";
-        private const string cscCmd2 =
-            @"C:\Users\bkalb\Documents\IGME 106 Online\PE_Grader\packages\Microsoft.Net.Compilers.2.3.2\tools\csc.exe";
-
+        //NOTE: You may have to change this line.
         private const string msbuild =
             @"C:\Program Files (x86)\Microsoft Visual Studio\2017\Professional\MSBuild\15.0\Bin\MSBuild.exe";
 
         private List<StudentWork> _studentWork;
 
-        private List<Form3> _codeWindows;
+        private List<CodeWindow> _codeWindows;
 
         private Process _runningApp;
 
+        private bool _monoGameProject;
+
         private StudentWork SelectedStudent => _studentWork[listBox1.SelectedIndex];
 
-        public Form2()
+        public StudentList()
         {
             InitializeComponent();
             _studentWork = new List<StudentWork>();
-            _codeWindows = new List<Form3>();
+            _codeWindows = new List<CodeWindow>();
         }
 
-        private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
+        private void listBox1_SelectedIndexChanged(object sender, EventArgs e) // Students
         {
             listBox2.Items.Clear();
             if (SelectedStudent.CodeFileNames != null)
@@ -65,26 +63,29 @@ namespace PE_Grader
             _runningApp = null;
         }
 
-        private void listBox2_DoubleClick(object sender, EventArgs e)
+        private void listBox2_DoubleClick(object sender, EventArgs e) // Code Files
         {
             string file = listBox2.SelectedItem as string;
             string code = File.ReadAllText(SelectedStudent.SourceDirectory + "\\" + file);
-            var codeWindow = new Form3(code, SelectedStudent.StudentName + " - " + file);
+            var codeWindow = new CodeWindow(code, SelectedStudent.StudentName + " - " + file);
             _codeWindows.Add(codeWindow);
             codeWindow.Show();
         }
 
         private async void button3_Click(object sender, EventArgs e) // Process
         {
-            button3.Enabled = false;
             if (string.IsNullOrEmpty(textBox1.Text))
             {
                 return;
             }
+            button3.Enabled = false;
+
+            _monoGameProject = MessageBox.Show("Is this a MonoGame Project?", "MonoGame", MessageBoxButtons.YesNo) ==
+                               DialogResult.Yes;
+
             _studentWork = new List<StudentWork>();
+
             listBox1.Items.Clear();
-            // set directory
-            DirectoryInfo currentDir = new DirectoryInfo(textBox1.Text);
 
             RenameFiles("*.zip");
             RenameFiles("*.rar");
@@ -96,67 +97,48 @@ namespace PE_Grader
                 listBox1.Items.Add(studentWork.StudentName);
             }
 
-            foreach (var studentWork in _studentWork)
-            {
-                string studentDirectory = "";
-                if (Directory.GetDirectories(currentDir.FullName).Any(dir => dir.Contains(studentWork.ZipFileName)))
-                {
-                    studentWork.Directory = Directory.GetDirectories(currentDir.FullName)
-                        .First(dir => dir.Contains(studentWork.ZipFileName));
-                }
-                else
-                {
-                    studentWork.Directory = ExtractFile(studentWork.ZipFileName);
-                }
-            }
-
-            foreach (var studentWork in _studentWork)
-            {
-                studentWork.SourceDirectory = FindSourceCode(studentWork.Directory, "*.cs");
-                studentWork.SolutionFileName =
-                    Directory.GetFiles(FindSourceCode(studentWork.Directory, "*.sln"), "*.sln")[0];
-            }
-
-            foreach (var studentWork in _studentWork)
-            {
-                if (studentWork.SourceDirectory != "No Code")
-                {
-                    studentWork.CodeFileNames = Directory.GetFiles(studentWork.SourceDirectory, "*.cs")
-                        .Select(Path.GetFileName).ToList();
-
-                    string debugDir = studentWork.SourceDirectory + "\\bin\\Debug\\";
-
-                    //studentWork.ExeFileName = Directory.GetFiles(debugDir, "*.exe")[0];
-
-                    studentWork.ExeFileName = studentWork.SourceDirectory + "\\bin\\Debug\\Test.exe";
-                }
-            }
-
-            var compileTasks = _studentWork.Where(sw => sw.SourceDirectory != "No Code")
-                .Select(CompileProgram);
-            await Task.WhenAll(compileTasks);
-
-            var executeTasks = _studentWork.Where(sw => sw.SourceDirectory != "No Code")
-                .Select(ExecuteProgram);
-            await Task.WhenAll(executeTasks);
-
-            /*foreach (var studentWork in _studentWork)
-            {
-                if (studentWork.SourceDirectory != "No Code")
-                {
-                    string cmd = cscCmd1 + "/out:\"" + studentWork.SourceDirectory + "\\Test.exe\" " +
-                                 "\"" + studentWork.SourceDirectory + @"\*.cs" + "\"";
-
-                    //studentWork.CompilationOutput = ExecuteCommandSync(cmd);
-                }
-            }//*/
+            var searchTasks = _studentWork.Select(ProcessStudent);
+            await Task.WhenAll(searchTasks);
 
             button3.Enabled = true;
         }
 
+        private async Task ProcessStudent(StudentWork studentWork)
+        {
+            SearchDirectory(studentWork);
+
+            if (studentWork.SourceDirectory != "No Code")
+            {
+                await CompileProgram(studentWork);
+                await ExecuteProgram(studentWork);
+            }
+        }
+
+        private void SearchDirectory(StudentWork studentWork)
+        {
+            DirectoryInfo currentDir = new DirectoryInfo(textBox1.Text);
+            if (Directory.GetDirectories(currentDir.FullName).Any(dir => dir.Contains(studentWork.ZipFileName)))
+            {
+                studentWork.Directory = Directory.GetDirectories(currentDir.FullName)
+                    .First(dir => dir.Contains(studentWork.ZipFileName));
+            }
+            else
+            {
+                studentWork.Directory = ExtractFile(studentWork.ZipFileName);
+            }
+            studentWork.SourceDirectory = FindSourceCode(studentWork.Directory, "*.cs");
+            studentWork.SolutionFileName =
+                Directory.GetFiles(FindSourceCode(studentWork.Directory, "*.sln"), "*.sln")[0];
+            if (studentWork.SourceDirectory != "No Code")
+            {
+                studentWork.CodeFileNames = Directory.GetFiles(studentWork.SourceDirectory, "*.cs")
+                    .Select(Path.GetFileName).ToList();
+            }
+        }
+
         private async Task ExecuteProgram(StudentWork studentWork)
         {
-            if (checkBox1.Checked)
+            if (_monoGameProject)
             {
                 studentWork.ExeOutput = "MonoGame Project.\nClick \"Run .exe\" to run";
                 return;
@@ -206,7 +188,6 @@ namespace PE_Grader
             info.RedirectStandardInput = true;
             info.CreateNoWindow = true;
             info.UseShellExecute = false;
-            //info.Arguments = "/out:\"" + studentWork.SourceDirectory + "\\bin\\Debug\\Test.exe\" " + "\"" + studentWork.SourceDirectory + @"\*.cs" + "\"";
             Process proc = new Process();
             proc.StartInfo = info;
             proc.Start();
@@ -216,14 +197,6 @@ namespace PE_Grader
             }
             var task = proc.StandardOutput.ReadToEndAsync();
             var result = await task;
-            /*if (await Task.WhenAny(task, Task.Delay(5000)) == task)
-            {
-                result = task.Result;
-            }
-            else
-            {
-                result = "Compile Timeout";
-            }//*/
             if (!proc.HasExited)
             {
                 proc.Kill();
@@ -236,53 +209,6 @@ namespace PE_Grader
                 studentWork.ExeFileName = exeline.Substring(exeline.IndexOf("->") + 2).Trim();
             }
         }
-
-        public string ExecuteCommandSync(string command, bool mashEnter = false)
-        {
-            // create the ProcessStartInfo using "cmd" as the program to be run,
-            // and "/c " as the parameters.
-            // Incidentally, /c tells cmd that we want it to execute the command that follows,
-            // and then exit.
-            System.Diagnostics.ProcessStartInfo procStartInfo =
-                new System.Diagnostics.ProcessStartInfo("cmd", "/c " + command);
-
-            // The following commands are needed to redirect the standard output.
-            // This means that it will be redirected to the Process.StandardOutput StreamReader.
-            procStartInfo.RedirectStandardOutput = true;
-            procStartInfo.UseShellExecute = false;
-
-            if (mashEnter)
-            {
-                procStartInfo.RedirectStandardInput = true;
-            }
-
-            // Do not create the black window.
-            procStartInfo.CreateNoWindow = true;
-
-            // Now we create a process, assign its ProcessStartInfo and start it
-            System.Diagnostics.Process proc = new System.Diagnostics.Process();
-            proc.StartInfo = procStartInfo;
-            proc.Start();
-
-            if (mashEnter)
-            {
-                for (int i = 0; i < 10; i++)
-                {
-                    proc.StandardInput.WriteLine();
-                }
-            }
-
-            // Get the output into a string
-            string result = proc.StandardOutput.ReadToEnd();
-
-            if (mashEnter && !proc.HasExited)
-            {
-                proc.Kill();
-            }
-
-            return result;
-        }
-
 
         private string FindSourceCode(string dir, string mask)
         {
