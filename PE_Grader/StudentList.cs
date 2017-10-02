@@ -38,6 +38,11 @@ namespace PE_Grader
 
         private void listBox1_SelectedIndexChanged(object sender, EventArgs e) // Students
         {
+            if (listBox1.SelectedIndex < 0)
+            {
+                listBox1.SelectedIndex = listBox1.Items.Count - 1;
+            }
+
             listBox2.Items.Clear();
             if (SelectedStudent.CodeFileNames != null)
             {
@@ -127,14 +132,21 @@ namespace PE_Grader
                 studentWork.Directory = ExtractFile(studentWork.ZipFileName);
             }
             studentWork.SourceDirectory = FindSourceCode(studentWork.Directory, "*.cs");
-            studentWork.SolutionFileName =
-                Directory.GetFiles(FindSourceCode(studentWork.Directory, "*.sln"), "*.sln")[0];
+            var solutionDirectory = FindSourceCode(studentWork.Directory, "*.sln");
+            if (solutionDirectory != "No Code")
+            {
+                studentWork.SolutionFileName =
+                    Directory.GetFiles(solutionDirectory, "*.sln")[0];
+            }
             if (studentWork.SourceDirectory != "No Code")
             {
                 studentWork.CodeFileNames = Directory.GetFiles(studentWork.SourceDirectory, "*.cs")
                     .Select(Path.GetFileName).ToList();
             }
         }
+
+
+
 
         private async Task ExecuteProgram(StudentWork studentWork)
         {
@@ -160,9 +172,9 @@ namespace PE_Grader
             Process proc = new Process();
             proc.StartInfo = info;
             proc.Start();
-            for (int i = 0; i < 10; i++)
+            foreach (string t in textBox2.Lines)
             {
-                proc.StandardInput.WriteLine();
+                proc.StandardInput.WriteLine(t);
             }
             var task = proc.StandardOutput.ReadToEndAsync();
             if (await Task.WhenAny(task, Task.Delay(1500)) == task)
