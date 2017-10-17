@@ -25,7 +25,7 @@ namespace PE_Grader
 
         private Process _runningApp;
 
-        private bool _monoGameProject;
+        private bool _consoleProject;
 
         private StudentWork SelectedStudent => _studentWork[listBox1.SelectedIndex];
 
@@ -42,7 +42,11 @@ namespace PE_Grader
             {
                 listBox1.SelectedIndex = listBox1.Items.Count - 1;
             }
+            ShowSelectedStudentAssignment();
+        }
 
+        private void ShowSelectedStudentAssignment()
+        {
             listBox2.Items.Clear();
             if (SelectedStudent.CodeFileNames != null)
             {
@@ -70,11 +74,14 @@ namespace PE_Grader
 
         private void listBox2_DoubleClick(object sender, EventArgs e) // Code Files
         {
-            string file = listBox2.SelectedItem as string;
-            string code = File.ReadAllText(SelectedStudent.SourceDirectory + "\\" + file);
-            var codeWindow = new CodeWindow(code, SelectedStudent.StudentName + " - " + file);
-            _codeWindows.Add(codeWindow);
-            codeWindow.Show();
+            if (listBox2.SelectedIndex >= 0 && listBox2.SelectedIndex < listBox2.Items.Count)
+            {
+                string file = listBox2.SelectedItem as string;
+                string code = File.ReadAllText(SelectedStudent.SourceDirectory + "\\" + file);
+                var codeWindow = new CodeWindow(code, SelectedStudent.StudentName + " - " + file);
+                _codeWindows.Add(codeWindow);
+                codeWindow.Show();
+            }
         }
 
         private async void button3_Click(object sender, EventArgs e) // Process
@@ -85,7 +92,7 @@ namespace PE_Grader
             }
             button3.Enabled = false;
 
-            _monoGameProject = MessageBox.Show("Is this a MonoGame Project?", "MonoGame", MessageBoxButtons.YesNo) ==
+            _consoleProject = MessageBox.Show("Is this a console project?", "Console", MessageBoxButtons.YesNo) ==
                                DialogResult.Yes;
 
             _studentWork = new List<StudentWork>();
@@ -102,8 +109,8 @@ namespace PE_Grader
                 listBox1.Items.Add(studentWork.StudentName);
             }
 
-            var searchTasks = _studentWork.Select(ProcessStudent);
-            await Task.WhenAll(searchTasks);
+            var processTasks = _studentWork.Select(ProcessStudent);
+            await Task.WhenAll(processTasks);
 
             button3.Enabled = true;
         }
@@ -150,9 +157,9 @@ namespace PE_Grader
 
         private async Task ExecuteProgram(StudentWork studentWork)
         {
-            if (_monoGameProject)
+            if (!_consoleProject)
             {
-                studentWork.ExeOutput = "MonoGame Project.\nClick \"Run .exe\" to run";
+                studentWork.ExeOutput = "Not a console project.\nClick \"Run .exe\" to run";
                 return;
             }
 
@@ -163,12 +170,12 @@ namespace PE_Grader
                 studentWork.ExeOutput = result;
                 return;
             }
-            Directory.SetCurrentDirectory(Path.GetDirectoryName(filename));
             ProcessStartInfo info = new ProcessStartInfo(filename);
             info.RedirectStandardOutput = true;
             info.RedirectStandardInput = true;
             info.CreateNoWindow = true;
             info.UseShellExecute = false;
+            info.WorkingDirectory = Path.GetDirectoryName(filename);
             Process proc = new Process();
             proc.StartInfo = info;
             proc.Start();
@@ -194,12 +201,12 @@ namespace PE_Grader
 
         private async Task CompileProgram(StudentWork studentWork)
         {
-            Directory.SetCurrentDirectory(Path.GetDirectoryName(studentWork.SourceDirectory));
             ProcessStartInfo info = new ProcessStartInfo(msbuild);
             info.RedirectStandardOutput = true;
             info.RedirectStandardInput = true;
             info.CreateNoWindow = true;
             info.UseShellExecute = false;
+            info.WorkingDirectory = Path.GetDirectoryName(studentWork.SourceDirectory);
             Process proc = new Process();
             proc.StartInfo = info;
             proc.Start();
@@ -303,7 +310,7 @@ namespace PE_Grader
 
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        private void button1_Click(object sender, EventArgs e) // Open Solution file
         {
             Process.Start(SelectedStudent.SolutionFileName);
         }
@@ -318,16 +325,25 @@ namespace PE_Grader
 
         }
 
-        private void button2_Click(object sender, EventArgs e)
+        private void button2_Click(object sender, EventArgs e) // Run .exe
         {
             if (File.Exists(SelectedStudent.ExeFileName))
             {
+                Directory.SetCurrentDirectory(Path.GetDirectoryName(SelectedStudent.ExeFileName));
                 _runningApp = Process.Start(SelectedStudent.ExeFileName);
             }
             else
             {
                 MessageBox.Show("No .exe file!");
             }
+        }
+
+        private async void button4_Click(object sender, EventArgs e)
+        {
+            button4.Enabled = false;
+            await ExecuteProgram(SelectedStudent);
+            ShowSelectedStudentAssignment();
+            button4.Enabled = true;
         }
     }
 }
